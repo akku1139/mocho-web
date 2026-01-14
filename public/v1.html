@@ -41,12 +41,12 @@
 
 <script type="module">
     // @xenova/transformers を CDN からインポート
-    import { AutoTokenizer, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers';
+    import { AutoTokenizer, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers';
 
     // --- 設定 ---
     // GitHub Releases 等の直リンクを指定
     const MODEL_URL = 'https://github.com/akku1139/mocho/releases/download/v1-l6-e512-1/mocho.onnx';
-    const TOKENIZER_JSON_URL = 'https://github.com/akku1139/mocho/raw/refs/heads/v2/model/tokenizer/tokenizer.json';
+    const TOKENIZER_JSON_URL = 'tokenizer.json';
     
     const N_LAYER = 6;
     const N_EMBD = 512;
@@ -64,7 +64,7 @@
             
             // 1. Tokenizerのロード
             // remoteURLを指定することでHF Hubを介さず直接ファイルを読み込む
-            tokenizer = await AutoTokenizer.from_pretrained('mocho-local', {
+            tokenizer = await AutoTokenizer.from_pretrained('/gh/', {
                 config: { model_type: 'gpt2' }, // 汎用的な設定を指定
                 custom_files: { 'tokenizer.json': TOKENIZER_JSON_URL }
             });
