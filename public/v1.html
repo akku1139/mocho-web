@@ -46,10 +46,7 @@
     // ort.env.wasm.simd = false;
     env.remoteHost = 'https://raw.githubusercontent.com/akku1139/mocho/refs/heads/';
     env.remotePathTemplate = '{model}/model/tokenizer';
-    // GitHub Releases 等の直リンクを指定
-    const MODEL_URL = '/proxy/gh/akku1139/mocho/releases/download/v1-l6-e512-1/mocho.onnx';
-    const TOKENIZER_JSON_URL = 'tokenizer.json';
-    
+
     const N_LAYER = 6;
     const N_EMBD = 512;
 
@@ -62,6 +59,12 @@
 
     async function init() {
         try {
+            // GitHub Releases 等の直リンクを指定
+            const searchParams = new URLSearchParams(window.location.search);
+            const model = searchParams.get("model") ?? 'v1-l6-e512-1';
+            const MODEL_URL = `/proxy/gh/akku1139/mocho/releases/download/${model}/mocho.onnx`;
+            const TOKENIZER_JSON_URL = 'tokenizer.json';
+
             statusEl.innerText = "トークナイザーをロード中...";
             // remoteURLを指定することでHF Hubを介さず直接ファイルを読み込む
             tokenizer = await AutoTokenizer.from_pretrained('v1', {
@@ -71,12 +74,10 @@
 
             statusEl.innerText = "ONNXモデルをロード中...";
 
-            const params = new URLSearchParams(window.location.search);
             let provider = 'wasm'; // デフォルト
-            
-            if (params.has('webgpu')) {
+            if (searchParams.has('webgpu')) {
                 provider = 'webgpu';
-            } else if (params.has('webgl')) {
+            } else if (searchParams.has('webgl')) {
                 provider = 'webgl';
             }
 
@@ -84,7 +85,7 @@
                 executionProviders: [provider],
             });
 
-            statusEl.innerText = `準備完了 (バックエンド: ${provider})`;
+            statusEl.innerText = `準備完了 (モデル: ${model}, バックエンド: ${provider})`;
             btn.innerText = "生成実行";
             btn.disabled = false;
             outputEl.innerText = "ボタンを押すと生成を開始します。";
