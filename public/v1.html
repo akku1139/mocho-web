@@ -70,11 +70,21 @@
             });
 
             statusEl.innerText = "ONNXモデルをロード中...";
+
+            const params = new URLSearchParams(window.location.search);
+            let provider = 'wasm'; // デフォルト
+            
+            if (params.has('webgpu')) {
+                provider = 'webgpu';
+            } else if (params.has('webgl')) {
+                provider = 'webgl';
+            }
+
             session = await ort.InferenceSession.create(MODEL_URL, {
-                executionProviders: ['wasm'], // WebGPUが不安定な場合はまずWASMで確認
+                executionProviders: [provider],
             });
 
-            statusEl.innerText = `準備完了`;
+            statusEl.innerText = `準備完了 (バックエンド: ${provider})`;
             btn.innerText = "生成実行";
             btn.disabled = false;
             outputEl.innerText = "ボタンを押すと生成を開始します。";
