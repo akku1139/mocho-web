@@ -79,7 +79,7 @@
             
             // 2. ONNXモデルのロード
             session = await ort.InferenceSession.create(MODEL_URL, {
-                executionProviders: ['wasm'], // 'webgpu',
+                executionProviders: ['webgpu', 'wasm'],
                 // graphOptimizationLevel: 'all',
             });
 
