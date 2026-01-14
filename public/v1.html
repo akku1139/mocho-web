@@ -99,15 +99,18 @@
         
         btn.disabled = true;
         outputEl.innerText = "";
-
+    
         try {
-            // 特殊トークンIDの動的取得
-            const [s_id, input_id, output_id, eos_id] = tokenizer.model.convert_tokens_to_ids(['<s>', '[INPUT]', '[OUTPUT]', '</s>']);
-
-            // プロンプト組み立て: <s> + leftCtx + [INPUT] + inputStr + [OUTPUT]
+            // ID取得。もし undefined になるなら fallback を用意
+            const token_ids = tokenizer.model.convert_tokens_to_ids(['<s>', '[INPUT]', '[OUTPUT]', '</s>']);
+            const s_id = token_ids[0];
+            const input_id = token_ids[1];
+            const output_id = token_ids[2];
+            const eos_id = token_ids[3];
+    
             const left_ids = (await tokenizer(leftCtx, { add_special_tokens: false })).input_ids.data;
             const in_ids = (await tokenizer(inputStr, { add_special_tokens: false })).input_ids.data;
-
+    
             let currentIds = [
                 BigInt(s_id),
                 ...Array.from(left_ids).map(x => BigInt(x)),
@@ -115,52 +118,61 @@
                 ...Array.from(in_ids).map(x => BigInt(x)),
                 BigInt(output_id)
             ];
-
-            // 初期ステート (Layer数分)
+    
             let states = {};
             for (let i = 0; i < N_LAYER; i++) {
                 states[`state_in_${i}`] = new ort.Tensor('float32', new Float32Array(N_EMBD), [1, N_EMBD]);
             }
-
-            // 生成ループ
+    
             for (let step = 0; step < 100; step++) {
                 const inputTensor = new ort.Tensor('int64', BigInt64Array.from(currentIds), [currentIds.length, 1]);
                 const feeds = { idx: inputTensor, ...states };
-
+    
+                // 推論実行
                 const results = await session.run(feeds);
-
-                // Logitsから次予測 (末尾のトークン)
-                const logits = results.logits.data;
-                const vocabSize = results.logits.dims[2];
-                const lastLogits = logits.slice(-vocabSize);
+    
+                // --- 修正箇所: 安全に出力を取得 ---
+                // session.run の結果から "logits" というキーで取得
+                const logitsTensor = results.logits; 
+                if (!logitsTensor) {
+                    throw new Error("モデルの出力に 'logits' が見つかりません。ONNXの出力名を確認してください。");
+                }
                 
-                // Greedy選択
+                const logitsData = logitsTensor.data;
+                const dims = logitsTensor.dims; // [seq, batch, vocab]
+                const vocabSize = dims[2];
+    
+                // 最後のトークンの Logits をスライス
+                const lastLogits = logitsData.slice(-vocabSize);
+                
                 let nextToken = 0;
                 let maxLogit = -Infinity;
                 for(let j=0; j<vocabSize; j++) {
-                    if(lastLogits[j] > maxLogit) { maxLogit = lastLogits[j]; nextToken = j; }
+                    if(lastLogits[j] > maxLogit) {
+                        maxLogit = lastLogits[j];
+                        nextToken = j;
+                    }
                 }
-
+    
                 if (nextToken === eos_id) break;
-
-                // 文字にデコードして表示
+    
                 const decodedText = tokenizer.decode([nextToken]);
                 outputEl.innerText += decodedText;
-
-                // ステート更新
+    
+                // ステート更新 (こちらも安全に取得)
                 for (let j = 0; j < N_LAYER; j++) {
-                    states[`state_in_${j}`] = results[`state_out_${j}`];
+                    const outName = `state_out_${j}`;
+                    if (results[outName]) {
+                        states[`state_in_${j}`] = results[outName];
+                    }
                 }
-
-                // 次回は生成されたトークン1つのみを入力
+    
                 currentIds = [BigInt(nextToken)];
-
-                // UIフリーズ防止
                 await new Promise(r => setTimeout(r, 0));
             }
         } catch (e) {
-            console.error(e);
-            outputEl.innerText += "\n[推論エラー]";
+            console.error("Inference Error Detailed:", e);
+            outputEl.innerText += "\n[推論エラー]: " + e.message;
         }
         btn.disabled = false;
     }
