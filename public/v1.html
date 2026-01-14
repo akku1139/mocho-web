@@ -64,7 +64,7 @@
             
             // 1. Tokenizerのロード
             // remoteURLを指定することでHF Hubを介さず直接ファイルを読み込む
-            tokenizer = await AutoTokenizer.from_pretrained('/gh/', {
+            tokenizer = await AutoTokenizer.from_pretrained('gh', {
                 config: { model_type: 'gpt2' }, // 汎用的な設定を指定
                 custom_files: { 'tokenizer.json': TOKENIZER_JSON_URL }
             });
