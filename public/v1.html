@@ -5,16 +5,14 @@
     <title>Mocho SRU - Browser Inference</title>
     <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.all.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; background-color: #f9f9f9; }
+        body { font-family: sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; background-color: #f9f9f9; }
         .card { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        h1 { font-size: 1.5rem; margin-top: 0; color: #333; }
         .field { margin-bottom: 1.5rem; }
-        label { display: block; margin-bottom: 0.5rem; font-weight: bold; font-size: 0.9rem; color: #555; }
-        textarea, input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-size: 1rem; }
-        button { background: #007bff; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 1rem; transition: background 0.2s; }
-        button:hover { background: #0056b3; }
-        button:disabled { background: #ccc; cursor: not-allowed; }
-        #output { margin-top: 1.5rem; padding: 1rem; background: #f1f1f1; border-radius: 6px; min-height: 50px; white-space: pre-wrap; font-family: monospace; border-left: 4px solid #007bff; }
+        label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
+        input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+        button { background: #007bff; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; }
+        button:disabled { background: #ccc; }
+        #output { margin-top: 1.5rem; padding: 1rem; background: #f1f1f1; border-radius: 6px; min-height: 50px; white-space: pre-wrap; border-left: 4px solid #007bff; font-family: monospace; }
         .status { font-size: 0.85rem; color: #888; margin-top: 1rem; }
     </style>
 </head>
@@ -24,31 +22,28 @@
     <h1>Mocho SRU Browser</h1>
     
     <div class="field">
-        <label>左側文脈 (Left Context):</label>
+        <label>左側文脈:</label>
         <input type="text" id="leftContext" value="初期化した">
     </div>
 
     <div class="field">
-        <label>入力 (Input カタカナ):</label>
+        <label>入力 (カタカナ):</label>
         <input type="text" id="inputText" value="ケッカハザンネンナモノデアッタ">
     </div>
 
     <button id="generateBtn" disabled>ロード中...</button>
 
-    <div id="output">モデルのロードを待っています...</div>
+    <div id="output">モデルを読み込んでいます...</div>
     <div id="status" class="status"></div>
 </div>
 
 <script type="module">
-    // @xenova/transformers を CDN からインポート
     import { AutoTokenizer, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers';
-    // import * as ort from 'https://cdn.jsdelivr.net/npm/onnxruntime-web';
-
-    ort.env.debug = true;
-    ort.env.logLevel = 'verbose';
-    ort.env.wasm.simd = false;
 
     // --- 設定 ---
+    ort.env.debug = true;
+    ort.env.logLevel = 'verbose';
+    // ort.env.wasm.simd = false;
     env.remoteHost = 'https://raw.githubusercontent.com/akku1139/mocho/refs/heads/';
     env.remotePathTemplate = '{model}/model/tokenizer';
     // GitHub Releases 等の直リンクを指定
@@ -66,32 +61,27 @@
     const outputEl = document.getElementById('output');
 
     async function init() {
-        // try {
-            statusEl.innerText = "トークナイザーをフェッチ中...";
-            
-            // 1. Tokenizerのロード
+        try {
+            statusEl.innerText = "トークナイザーをロード中...";
             // remoteURLを指定することでHF Hubを介さず直接ファイルを読み込む
             tokenizer = await AutoTokenizer.from_pretrained('v1', {
                 config: { model_type: 'gpt2' }, // 汎用的な設定を指定
                 custom_files: { 'tokenizer.json': TOKENIZER_JSON_URL }
             });
 
-            statusEl.innerText = "ONNXモデルをフェッチ中 (WebGPU対応)...";
-            
-            // 2. ONNXモデルのロード
+            statusEl.innerText = "ONNXモデルをロード中...";
             session = await ort.InferenceSession.create(MODEL_URL, {
-                executionProviders: ['webgpu', 'wasm'],
-                // graphOptimizationLevel: 'all',
+                executionProviders: ['wasm'], // WebGPUが不安定な場合はまずWASMで確認
             });
 
-            statusEl.innerText = `準備完了 (Backend: ${session.handler.constructor.name})`;
+            statusEl.innerText = `準備完了`;
             btn.innerText = "生成実行";
             btn.disabled = false;
-            outputEl.innerText = "入力を入力してボタンを押してください。";
-        // } catch (e) {
-        //     console.error(e);
-        //     statusEl.innerText = "エラー: " + e.message;
-        // }
+            outputEl.innerText = "ボタンを押すと生成を開始します。";
+        } catch (e) {
+            console.error(e);
+            statusEl.innerText = "エラー: " + e.message;
+        }
     }
 
     async function generate() {
@@ -100,86 +90,74 @@
         
         btn.disabled = true;
         outputEl.innerText = "";
-    
+
         try {
-            // ID取得。もし undefined になるなら fallback を用意
-            const token_ids = tokenizer.model.convert_tokens_to_ids(['<s>', '[INPUT]', '[OUTPUT]', '</s>']);
-            const s_id = token_ids[0];
-            const input_id = token_ids[1];
-            const output_id = token_ids[2];
-            const eos_id = token_ids[3];
-    
-            const left_ids = (await tokenizer(leftCtx, { add_special_tokens: false })).input_ids.data;
-            const in_ids = (await tokenizer(inputStr, { add_special_tokens: false })).input_ids.data;
-    
-            let currentIds = [
-                BigInt(s_id),
-                ...Array.from(left_ids).map(x => BigInt(x)),
-                BigInt(input_id),
-                ...Array.from(in_ids).map(x => BigInt(x)),
-                BigInt(output_id)
-            ];
-    
-            let states = {};
-            for (let i = 0; i < N_LAYER; i++) {
-                states[`state_in_${i}`] = new ort.Tensor('float32', new Float32Array(N_EMBD), [1, N_EMBD]);
-            }
-    
+            // 特殊トークンのID取得
+            const s_id = 1;      // <s>
+            const input_id = 3;  // [INPUT]
+            const output_id = 4; // [OUTPUT]
+            const eos_id = 2;    // </s>
+
+            const left_ids = Array.from((await tokenizer(leftCtx)).input_ids.data);
+            const in_ids = Array.from((await tokenizer(inputStr)).input_ids.data);
+
+            // プロンプト全体の組み立て
+            let currentIds = [s_id, ...left_ids, input_id, ...in_ids, output_id];
+            
+            // 状態の初期化 (Layers, Batch=1, Dim)
+            let states = new ort.Tensor('float32', new Float32Array(N_LAYER * 1 * N_EMBD), [N_LAYER, 1, N_EMBD]);
+
+            // --- 推論ループ ---
             for (let step = 0; step < 100; step++) {
-                const inputTensor = new ort.Tensor('int64', BigInt64Array.from(currentIds), [currentIds.length, 1]);
-                const feeds = { idx: inputTensor, ...states };
-    
-                // 推論実行
+                // currentIds を Tensor に変換
+                const idxTensor = new ort.Tensor('int64', BigInt64Array.from(currentIds.map(BigInt)), [currentIds.length, 1]);
+                
+                const feeds = {
+                    idx: idxTensor,
+                    c_states: states
+                };
+
                 const results = await session.run(feeds);
-    
-                // --- 修正箇所: 安全に出力を取得 ---
-                // session.run の結果から "logits" というキーで取得
-                const logitsTensor = results.logits; 
-                if (!logitsTensor) {
-                    throw new Error("モデルの出力に 'logits' が見つかりません。ONNXの出力名を確認してください。");
-                }
                 
-                const logitsData = logitsTensor.data;
-                const dims = logitsTensor.dims; // [seq, batch, vocab]
-                const vocabSize = dims[2];
-    
-                // 最後のトークンの Logits をスライス
-                const lastLogits = logitsData.slice(-vocabSize);
-                
+                // 次のステートを保存
+                states = results.new_states;
+
+                // Logits から次のトークンを選択 (Argmax)
+                const logits = results.logits.data;
+                const vocabSize = results.logits.dims[2];
+                const lastTokenLogits = logits.slice(-vocabSize);
+
                 let nextToken = 0;
                 let maxLogit = -Infinity;
-                for(let j=0; j<vocabSize; j++) {
-                    if(lastLogits[j] > maxLogit) {
-                        maxLogit = lastLogits[j];
-                        nextToken = j;
+                for (let i = 0; i < vocabSize; i++) {
+                    if (lastTokenLogits[i] > maxLogit) {
+                        maxLogit = lastTokenLogits[i];
+                        nextToken = i;
                     }
                 }
-    
+
                 if (nextToken === eos_id) break;
-    
-                const decodedText = tokenizer.decode([nextToken]);
-                outputEl.innerText += decodedText;
-    
-                // ステート更新 (こちらも安全に取得)
-                for (let j = 0; j < N_LAYER; j++) {
-                    const outName = `state_out_${j}`;
-                    if (results[outName]) {
-                        states[`state_in_${j}`] = results[outName];
-                    }
-                }
-    
-                currentIds = [BigInt(nextToken)];
+
+                // デコードと表示
+                const word = tokenizer.decode([nextToken]);
+                outputEl.innerText += word;
+
+                // 次のステップの入力は「今出たトークン1つ」だけにする
+                currentIds = [nextToken];
+
+                // ブラウザの描画をブロックしないように少し待機
                 await new Promise(r => setTimeout(r, 0));
             }
+
         } catch (e) {
-            console.error("Inference Error Detailed:", e);
-            outputEl.innerText += "\n[推論エラー]: " + e.message;
+            console.error(e);
+            outputEl.innerText += "\n[Error]: " + e.message;
         }
         btn.disabled = false;
     }
 
     btn.onclick = generate;
-    await init();
+    init();
 </script>
 
 </body>
