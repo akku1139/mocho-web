@@ -89,66 +89,80 @@
         const inputStr = document.getElementById('inputText').value;
         
         btn.disabled = true;
-        outputEl.innerText = "";
-
+        outputEl.innerText = "推論中...";
+    
         try {
-            // 特殊トークンのID取得
-            const s_id = 2;      // <s>
-            const input_id = 6001;  // [INPUT]
-            const output_id = 6002; // [OUTPUT]
-            const eos_id = 3;    // </s>
-
-            const left_ids = Array.from((await tokenizer(leftCtx)).input_ids.data);
-            const in_ids = Array.from((await tokenizer(inputStr)).input_ids.data);
-
-            // プロンプト全体の組み立て
-            let currentIds = [s_id, ...left_ids, input_id, ...in_ids, output_id];
+            // --- tokenizer.json に基づく正しいID指定 ---
+            const S_ID = 2;          // <s>
+            const CONTEXT_ID = 6000; // [CONTEXT]
+            const INPUT_ID = 6001;   // [INPUT]
+            const OUTPUT_ID = 6002;  // [OUTPUT]
+            const EOS_ID = 3;        // </s>
+    
+            const left_res = await tokenizer(leftCtx, { add_special_tokens: false });
+            const in_res = await tokenizer(inputStr, { add_special_tokens: false });
             
-            // 状態の初期化 (Layers, Batch=1, Dim)
+            const left_ids = Array.from(left_res.input_ids.data);
+            const in_ids = Array.from(in_res.input_ids.data);
+    
+            // プロンプト全体の組み立て
+            const allPromptIds = [
+                S_ID, 
+                CONTEXT_ID, 
+                ...left_ids, 
+                INPUT_ID, 
+                ...in_ids, 
+                OUTPUT_ID
+            ];
+            
+            // 状態の初期化 [Layers, Batch, Dim]
             let states = new ort.Tensor('float32', new Float32Array(N_LAYER * 1 * N_EMBD), [N_LAYER, 1, N_EMBD]);
-
-            // --- 推論ループ ---
-            for (let step = 0; step < 100; step++) {
-                // currentIds を Tensor に変換
-                const idxTensor = new ort.Tensor('int64', BigInt64Array.from(currentIds.map(BigInt)), [currentIds.length, 1]);
-                
-                const feeds = {
-                    idx: idxTensor,
-                    c_states: states
-                };
-
+            let lastLogits = null;
+    
+            // 【重要】Prefill（最初のプロンプト入力）も1トークンずつ実行する
+            // これをしないと ONNX 内部のループがバグり、「として」地獄になります
+            outputEl.innerText = ""; 
+            for (const tid of allPromptIds) {
+                const idxTensor = new ort.Tensor('int64', BigInt64Array.from([BigInt(tid)]), [1, 1]);
+                const feeds = { idx: idxTensor, c_states: states };
                 const results = await session.run(feeds);
                 
-                // 次のステートを保存
                 states = results.new_states;
-
-                // Logits から次のトークンを選択 (Argmax)
-                const logits = results.logits.data;
-                const vocabSize = results.logits.dims[2];
-                const lastTokenLogits = logits.slice(-vocabSize);
-
+                lastLogits = results.logits.data; 
+            }
+    
+            // --- 生成ループ (出力トークンの生成) ---
+            for (let step = 0; step < 100; step++) {
+                const vocabSize = 6003; // vocab_size
+                const currentLogits = lastLogits.slice(-vocabSize);
+    
+                // Argmax で次のトークンを選択
                 let nextToken = 0;
                 let maxLogit = -Infinity;
                 for (let i = 0; i < vocabSize; i++) {
-                    if (lastTokenLogits[i] > maxLogit) {
-                        maxLogit = lastTokenLogits[i];
+                    if (currentLogits[i] > maxLogit) {
+                        maxLogit = currentLogits[i];
                         nextToken = i;
                     }
                 }
-
-                if (nextToken === eos_id) break;
-
-                // デコードと表示
+    
+                if (nextToken === EOS_ID) break;
+    
+                // デコード
                 const word = tokenizer.decode([nextToken]);
                 outputEl.innerText += word;
-
-                // 次のステップの入力は「今出たトークン1つ」だけにする
-                currentIds = [nextToken];
-
-                // ブラウザの描画をブロックしないように少し待機
+    
+                // 次のトークンを1つだけ入力して状態を更新
+                const idxTensor = new ort.Tensor('int64', BigInt64Array.from([BigInt(nextToken)]), [1, 1]);
+                const feeds = { idx: idxTensor, c_states: states };
+                const results = await session.run(feeds);
+    
+                states = results.new_states;
+                lastLogits = results.logits.data;
+    
                 await new Promise(r => setTimeout(r, 0));
             }
-
+    
         } catch (e) {
             console.error(e);
             outputEl.innerText += "\n[Error]: " + e.message;
