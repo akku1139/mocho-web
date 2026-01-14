@@ -75,8 +75,8 @@
             
             // 2. ONNXモデルのロード
             session = await ort.InferenceSession.create(MODEL_URL, {
-                executionProviders: ['webgpu', 'wasm'],
-                graphOptimizationLevel: 'all'
+                executionProviders: ['wasm'], // 'webgpu',
+                graphOptimizationLevel: 'all',
             });
 
             statusEl.innerText = `準備完了 (Backend: ${session.handler.constructor.name})`;
