@@ -93,10 +93,10 @@
 
         try {
             // 特殊トークンのID取得
-            const s_id = 1;      // <s>
-            const input_id = 3;  // [INPUT]
-            const output_id = 4; // [OUTPUT]
-            const eos_id = 2;    // </s>
+            const s_id = 2;      // <s>
+            const input_id = 6001;  // [INPUT]
+            const output_id = 6002; // [OUTPUT]
+            const eos_id = 3;    // </s>
 
             const left_ids = Array.from((await tokenizer(leftCtx)).input_ids.data);
             const in_ids = Array.from((await tokenizer(inputStr)).input_ids.data);
