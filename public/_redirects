@@ -1,1 +1,1 @@
-/gh/ https://github.com/akku1139/mocho/releases/download/
+/gh/* https://github.com/akku1139/mocho/releases/download/:splat
