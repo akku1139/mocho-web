@@ -44,7 +44,7 @@
     import { AutoTokenizer, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers';
 
     // --- 設定 ---
-    env.remoteHost = 'https://raw.githubusercontent.com/akku1139/mocho/refs/tags/';
+    env.remoteHost = 'https://raw.githubusercontent.com/akku1139/mocho/refs/heads/';
     env.remotePathTemplate = '{model}/model/tokenizer';
     // GitHub Releases 等の直リンクを指定
     const MODEL_URL = 'https://github.com/akku1139/mocho/releases/download/v1-l6-e512-1/mocho.onnx';
@@ -66,7 +66,7 @@
             
             // 1. Tokenizerのロード
             // remoteURLを指定することでHF Hubを介さず直接ファイルを読み込む
-            tokenizer = await AutoTokenizer.from_pretrained('v1-l6-e512-1', {
+            tokenizer = await AutoTokenizer.from_pretrained('v1', {
                 config: { model_type: 'gpt2' }, // 汎用的な設定を指定
                 custom_files: { 'tokenizer.json': TOKENIZER_JSON_URL }
             });
