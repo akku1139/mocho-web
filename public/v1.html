@@ -74,11 +74,7 @@
             statusEl.innerText = "ONNXモデルをフェッチ中 (WebGPU対応)...";
             
             // 2. ONNXモデルのロード
-            // URLから直接 ArrayBuffer として取得してセッション作成
-            const response = await fetch(MODEL_URL);
-            const modelBuffer = await response.arrayBuffer();
-
-            session = await ort.InferenceSession.create(modelBuffer, {
+            session = await ort.InferenceSession.create(MODEL_URL, {
                 executionProviders: ['webgpu', 'wasm'],
                 graphOptimizationLevel: 'all'
             });
