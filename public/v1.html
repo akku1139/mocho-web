@@ -92,12 +92,11 @@
         outputEl.innerText = "推論中...";
     
         try {
-            // --- tokenizer.json に基づく正しいID指定 ---
-            const S_ID = 2;          // <s>
-            const CONTEXT_ID = 6000; // [CONTEXT]
-            const INPUT_ID = 6001;   // [INPUT]
-            const OUTPUT_ID = 6002;  // [OUTPUT]
-            const EOS_ID = 3;        // </s>
+            const S_ID = 2;          
+            const CONTEXT_ID = 6000; 
+            const INPUT_ID = 6001;   
+            const OUTPUT_ID = 6002;  
+            const EOS_ID = 3;        
     
             const left_res = await tokenizer(leftCtx, { add_special_tokens: false });
             const in_res = await tokenizer(inputStr, { add_special_tokens: false });
@@ -105,22 +104,14 @@
             const left_ids = Array.from(left_res.input_ids.data);
             const in_ids = Array.from(in_res.input_ids.data);
     
-            // プロンプト全体の組み立て
-            const allPromptIds = [
-                S_ID, 
-                CONTEXT_ID, 
-                ...left_ids, 
-                INPUT_ID, 
-                ...in_ids, 
-                OUTPUT_ID
-            ];
+            const allPromptIds = [S_ID, CONTEXT_ID, ...left_ids, INPUT_ID, ...in_ids, OUTPUT_ID];
             
-            // 状態の初期化 [Layers, Batch, Dim]
             let states = new ort.Tensor('float32', new Float32Array(N_LAYER * 1 * N_EMBD), [N_LAYER, 1, N_EMBD]);
             let lastLogits = null;
     
-            // 【重要】Prefill（最初のプロンプト入力）も1トークンずつ実行する
-            // これをしないと ONNX 内部のループがバグり、「として」地獄になります
+            // --- Prefill 計測開始 ---
+            // 一気に埋めると ONNX 内部のループがバグり、「として」地獄になります
+            const prefillStart = performance.now();
             outputEl.innerText = ""; 
             for (const tid of allPromptIds) {
                 const idxTensor = new ort.Tensor('int64', BigInt64Array.from([BigInt(tid)]), [1, 1]);
@@ -130,13 +121,17 @@
                 states = results.new_states;
                 lastLogits = results.logits.data; 
             }
-    
-            // --- 生成ループ (出力トークンの生成) ---
+            const prefillEnd = performance.now();
+            const prefillTime = prefillEnd - prefillStart;
+
+            // --- Decode（生成）計測開始 ---
+            const decodeStart = performance.now();
+            let generatedTokens = 0;
+
             for (let step = 0; step < 100; step++) {
-                const vocabSize = 6003; // vocab_size
+                const vocabSize = 6003; 
                 const currentLogits = lastLogits.slice(-vocabSize);
     
-                // Argmax で次のトークンを選択
                 let nextToken = 0;
                 let maxLogit = -Infinity;
                 for (let i = 0; i < vocabSize; i++) {
@@ -148,11 +143,10 @@
     
                 if (nextToken === EOS_ID) break;
     
-                // デコード
                 const word = tokenizer.decode([nextToken]);
                 outputEl.innerText += word;
+                generatedTokens++;
     
-                // 次のトークンを1つだけ入力して状態を更新
                 const idxTensor = new ort.Tensor('int64', BigInt64Array.from([BigInt(nextToken)]), [1, 1]);
                 const feeds = { idx: idxTensor, c_states: states };
                 const results = await session.run(feeds);
@@ -162,6 +156,12 @@
     
                 await new Promise(r => setTimeout(r, 0));
             }
+            const decodeEnd = performance.now();
+            const decodeTime = decodeEnd - decodeStart;
+
+            // --- 結果の表示 ---
+            const tps = (generatedTokens / (decodeTime / 1000)).toFixed(2);
+            statusEl.innerText = `Prefill: ${prefillTime.toFixed(2)}ms | Decode: ${decodeTime.toFixed(2)}ms (${tps} tokens/s)`;
     
         } catch (e) {
             console.error(e);
