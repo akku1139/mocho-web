@@ -61,7 +61,7 @@
     const outputEl = document.getElementById('output');
 
     async function init() {
-        try {
+        // try {
             statusEl.innerText = "トークナイザーをフェッチ中...";
             
             // 1. Tokenizerのロード
@@ -83,10 +83,10 @@
             btn.innerText = "生成実行";
             btn.disabled = false;
             outputEl.innerText = "入力を入力してボタンを押してください。";
-        } catch (e) {
-            console.error(e);
-            statusEl.innerText = "エラー: " + e.message;
-        }
+        // } catch (e) {
+        //     console.error(e);
+        //     statusEl.innerText = "エラー: " + e.message;
+        // }
     }
 
     async function generate() {
